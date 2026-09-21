@@ -1,0 +1,33 @@
+# Agendador de hora em hora. NAO roda o coletor aqui: so "cutuca" a rota
+# /api/collect na Vercel. Assim a sessao do Telegram fica guardada num lugar so
+# (as variaveis da Vercel) e o plano gratis da Vercel (cron 1x/dia) nao limita.
+#
+# Secrets do repositorio (Settings > Secrets and variables > Actions):
+#   COLLECT_URL  = https://SEU-DOMINIO.vercel.app/api/collect
+#   CRON_SECRET  = o mesmo valor da variavel CRON_SECRET na Vercel
+#
+# Obs: o GitHub desliga agendamentos de repositorio sem atividade por 60 dias.
+name: coleta
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: coleta
+  cancel-in-progress: false
+
+jobs:
+  cutucar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Chama /api/collect
+        env:
+          COLLECT_URL: ${{ secrets.COLLECT_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 330 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$COLLECT_URL"

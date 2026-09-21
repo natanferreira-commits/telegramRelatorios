@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* ================= ToolBox Arena — design tokens ================= */
+@theme inline {
+  --color-ground: #0a0e0c;   /* fundo base (quase-preto, viés verde) */
+  --color-panel: #121815;    /* superfície / card */
+  --color-panel2: #161e19;   /* superfície levemente elevada */
+  --color-raise: #1b241e;    /* hover / chip */
+  --color-line: #232d27;     /* borda */
+  --color-linesoft: #1b231e; /* borda sutil / divisória interna */
+  --color-ink: #e9f0eb;      /* texto principal */
+  --color-muted: #8a968e;    /* texto secundário */
+  --color-faint: #59635b;    /* texto apagado / label */
+
+  --color-lime: #c8ff00;     /* marca — só em ativo/foco/CTA */
+
+  --color-ok: #46b27c;       /* status saudável / em dia */
+  --color-warn: #e8a33d;     /* status atenção */
+  --color-crit: #e5544b;     /* status crítico */
+
+  /* categóricas (distribuição de conteúdo) — calmas, cockpit */
+  --color-c1: #46b27c;
+  --color-c2: #4c93a8;
+  --color-c3: #7e8cc4;
+  --color-c4: #c7a24e;
+  --color-c5: #a87bb0;
+  --color-c6: #6b7671;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* ---- Reskin das escalas do Tailwind pra identidade ToolBox Arena ----
+     Telas antigas usam neutral (chrome), violet (accent), emerald/amber/red
+     (status). Remapeando as escalas, elas herdam a identidade sem reescrever
+     classe por classe. As telas novas usam os tokens nomeados acima. */
+
+  /* neutral -> chrome cockpit (fundo/borda/texto) */
+  --color-neutral-950: #0a0e0c;
+  --color-neutral-900: #121815;
+  --color-neutral-800: #232d27;
+  --color-neutral-700: #2c3831;
+  --color-neutral-600: #59635b;
+  --color-neutral-500: #8a968e;
+  --color-neutral-400: #9aa69d;
+  --color-neutral-300: #c3ccc6;
+  --color-neutral-200: #e9f0eb;
+  --color-neutral-100: #eef3ef;
+  --color-neutral-50: #f4f8f5;
+
+  /* violet -> lime (accent de marca) */
+  --color-violet-200: #e6ff7a;
+  --color-violet-300: #dcff5c;
+  --color-violet-400: #d2ff33;
+  --color-violet-500: #c8ff00;
+  --color-violet-600: #c8ff00;
+  --color-violet-700: #a6d400;
+  --color-violet-950: #1a2400;
+
+  /* emerald -> ok (status saudável) */
+  --color-emerald-400: #5cc492;
+  --color-emerald-500: #46b27c;
+
+  /* amber -> warn (status atenção) */
+  --color-amber-400: #efb45f;
+  --color-amber-500: #e8a33d;
+
+  /* red / rose -> crit (status crítico / erro) */
+  --color-red-300: #f2a39d;
+  --color-red-400: #ef8880;
+  --color-red-500: #e5544b;
+  --color-red-600: #dc4a41;
+  --color-red-900: #5a1f1c;
+  --color-red-950: #351512;
+  --color-rose-500: #e5544b;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
