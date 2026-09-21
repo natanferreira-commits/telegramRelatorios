@@ -1,5 +1,17 @@
 import { getAffiliateOptions, type AffiliateOption } from "@/lib/affiliates";
-import { getDailyRange, type DailyRow } from "@/lib/sources";
+import {
+  addDays,
+  daysBetween,
+  FORMATO_LABEL,
+  getPostsRange,
+  hojeSP,
+  labelDia,
+  summarize,
+  type Formato,
+  type RPost,
+  type Summary,
+} from "@/lib/report";
+import { Card, DayBars, Delta, fmt, Legend, PostCard, RankTable, StatTile } from "@/components/report-ui";
 
 export const dynamic = "force-dynamic";
 
@@ -13,104 +25,42 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const str = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
 const iso = (v: string | undefined) => (v && ISO.test(v) ? v : undefined);
 
-// Hoje em São Paulo, como YYYY-MM-DD.
-function hojeSP(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-}
-
-function addDays(day: string, n: number): string {
-  const d = new Date(`${day}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
-
-function labelDia(day: string): string {
-  const d = new Date(`${day}T12:00:00Z`);
-  const sem = d.toLocaleDateString("pt-BR", { weekday: "short", timeZone: "UTC" }).replace(".", "");
-  const [, m, dd] = day.split("-");
-  return `${sem} ${dd}/${m}`;
-}
-
-// Lista todos os dias do intervalo (dia sem post aparece como zero).
-function fillDays(rows: DailyRow[], from: string, to: string): DailyRow[] {
-  const byDay = new Map(rows.map((r) => [r.dia, r]));
-  const out: DailyRow[] = [];
-  for (let d = from, i = 0; d <= to && i < 92; d = addDays(d, 1), i++) {
-    out.push(
-      byDay.get(d) ?? {
-        dia: d,
-        posts: 0,
-        comLink: 0,
-        tips: 0,
-        analises: 0,
-        cadastroPromo: 0,
-        resultados: 0,
-        interacao: 0,
-        viewsMedia: null,
-      },
-    );
-  }
-  return out;
-}
-
-type Totals = {
-  posts: number;
-  comLink: number;
-  tips: number;
-  analises: number;
-  cadastroPromo: number;
-  resultados: number;
-  interacao: number;
-  viewsMedia: number | null;
-  porDia: number;
-};
-
-function totalsOf(rows: DailyRow[]): Totals {
-  const sum = (k: keyof DailyRow) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
-  // média de views ponderada pelo nº de posts do dia
-  const comViews = rows.filter((r) => r.viewsMedia !== null && r.posts > 0);
-  const pesos = comViews.reduce((s, r) => s + r.posts, 0);
-  const posts = sum("posts");
-  return {
-    posts,
-    comLink: sum("comLink"),
-    tips: sum("tips"),
-    analises: sum("analises"),
-    cadastroPromo: sum("cadastroPromo"),
-    resultados: sum("resultados"),
-    interacao: sum("interacao"),
-    viewsMedia: pesos
-      ? Math.round(comViews.reduce((s, r) => s + (r.viewsMedia ?? 0) * r.posts, 0) / pesos)
-      : null,
-    porDia: rows.length ? Math.round((posts / rows.length) * 10) / 10 : 0,
-  };
-}
-
-function Delta({ a, b }: { a: number | null; b: number | null }) {
-  if (a === null || b === null) return <span className="text-faint">—</span>;
-  if (b === 0) return <span className="text-faint">{a === 0 ? "=" : "novo"}</span>;
-  const pct = Math.round(((a - b) / b) * 100);
-  if (pct === 0) return <span className="text-muted">=</span>;
-  return (
-    <span className={`font-semibold tabular-nums ${pct > 0 ? "text-ok" : "text-crit"}`}>
-      {pct > 0 ? "▲" : "▼"} {Math.abs(pct)}%
-    </span>
-  );
-}
-
-const METRICAS: { key: keyof Totals; label: string; hint?: string }[] = [
-  { key: "posts", label: "Posts" },
-  { key: "porDia", label: "Posts por dia" },
-  { key: "viewsMedia", label: "Views por post", hint: "média" },
-  { key: "tips", label: "Tips" },
-  { key: "analises", label: "Análises" },
-  { key: "cadastroPromo", label: "Cadastro / promo / reembolso" },
-  { key: "resultados", label: "Green / red" },
-  { key: "interacao", label: "Interação" },
-  { key: "comLink", label: "Com link" },
+const SERIES = [
+  { label: "Período A", className: "bg-seriea" },
+  { label: "Período B (base)", className: "bg-serieb" },
 ];
 
-const fmt = (n: number | null) => (n === null ? "—" : n.toLocaleString("pt-BR"));
+function groupByDay(posts: RPost[]): Map<string, RPost[]> {
+  const m = new Map<string, RPost[]>();
+  for (const p of posts) {
+    const list = m.get(p.dia) ?? [];
+    list.push(p);
+    m.set(p.dia, list);
+  }
+  return m;
+}
+
+function DayColumn({ day, posts, serie }: { day: string | undefined; posts: RPost[]; serie: "a" | "b" }) {
+  if (!day) return <div />;
+  return (
+    <div className="min-w-0">
+      <div className="mb-2 flex items-center gap-2 text-xs">
+        <span className={`h-2.5 w-2.5 rounded-[3px] ${serie === "a" ? "bg-seriea" : "bg-serieb"}`} />
+        <span className="font-semibold capitalize text-ink">{labelDia(day)}</span>
+        <span className="text-faint">
+          {posts.length} {posts.length === 1 ? "post" : "posts"}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {posts.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-line p-3 text-xs text-faint">Nenhum post neste dia.</p>
+        ) : (
+          posts.map((p) => <PostCard key={p.id} post={p} />)
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default async function CompararPage({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
@@ -124,60 +74,74 @@ export default async function CompararPage({ searchParams }: { searchParams: SP 
   const donoId = str(sp.dono);
 
   let donos: AffiliateOption[] = [];
-  let rowsA: DailyRow[] = [];
-  let rowsB: DailyRow[] = [];
+  let postsA: RPost[] = [];
+  let postsB: RPost[] = [];
   let error: string | null = null;
 
   try {
     donos = await getAffiliateOptions();
     const dono = donos.find((d) => String(d.id) === donoId);
     const channelIds = dono ? dono.channelIds : undefined;
-    const [a, b] = await Promise.all([
-      getDailyRange({ channelIds, from: aFrom, to: aTo }),
-      getDailyRange({ channelIds, from: bFrom, to: bTo }),
+    [postsA, postsB] = await Promise.all([
+      getPostsRange({ channelIds, from: aFrom, to: aTo }),
+      getPostsRange({ channelIds, from: bFrom, to: bTo }),
     ]);
-    rowsA = fillDays(a, aFrom, aTo);
-    rowsB = fillDays(b, bFrom, bTo);
   } catch (e) {
     error = e instanceof Error ? e.message : "erro desconhecido";
   }
 
-  const tA = totalsOf(rowsA);
-  const tB = totalsOf(rowsB);
-  const linhas = Math.max(rowsA.length, rowsB.length);
+  const A: Summary = summarize(postsA, aFrom, aTo);
+  const B: Summary = summarize(postsB, bFrom, bTo);
+  const diasA = daysBetween(aFrom, aTo);
+  const diasB = daysBetween(bFrom, bTo);
+  const linhas = Math.max(diasA.length, diasB.length);
+  const byDayA = groupByDay(postsA);
+  const byDayB = groupByDay(postsB);
+
+  // Casas: união das duas listas, ordenada pelo maior volume.
+  const casaNomes = [...new Set([...A.casas, ...B.casas].map((c) => c.nome))];
+  const casas = casaNomes
+    .map((nome) => ({
+      nome,
+      a: A.casas.find((c) => c.nome === nome)?.posts ?? 0,
+      b: B.casas.find((c) => c.nome === nome)?.posts ?? 0,
+    }))
+    .sort((x, y) => Math.max(y.a, y.b) - Math.max(x.a, x.b));
 
   const input =
     "rounded-lg border border-line bg-ground px-3 py-2 text-[13.5px] text-ink outline-none focus:border-lime/60 [color-scheme:dark]";
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10 md:px-8">
+    <main className="mx-auto max-w-6xl px-5 py-10 md:px-8">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Comparar períodos</h1>
         <p className="mt-1 text-sm text-muted">
-          O que mudou no conteúdo entre dois períodos — volume, alcance e mix. O padrão compara com
-          4 semanas antes, pra cair nos mesmos dias da semana.
+          Dois períodos lado a lado: volume, alcance, casas divulgadas e os posts de cada dia. O padrão
+          compara com 4 semanas antes, pra cair nos mesmos dias da semana.
         </p>
       </header>
 
-      <form method="get" className="mb-7 flex flex-wrap items-end gap-3 rounded-xl border border-line bg-panel p-4">
+      <form method="get" className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-line bg-panel p-4">
         <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-faint">
           Dono
           <select name="dono" defaultValue={donoId ?? ""} className={input}>
             <option value="">Todos os canais</option>
             {donos.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.nome}
-              </option>
+              <option key={d.id} value={d.id}>{d.nome}</option>
             ))}
           </select>
         </label>
         <fieldset className="flex items-end gap-2">
-          <legend className="mb-1 text-[11px] font-medium uppercase tracking-wide text-lime">Período A</legend>
+          <legend className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
+            <span className="h-2.5 w-2.5 rounded-[3px] bg-seriea" /> Período A
+          </legend>
           <input type="date" name="a_from" defaultValue={aFrom} className={input} aria-label="Período A, de" />
           <input type="date" name="a_to" defaultValue={aTo} className={input} aria-label="Período A, até" />
         </fieldset>
         <fieldset className="flex items-end gap-2">
-          <legend className="mb-1 text-[11px] font-medium uppercase tracking-wide text-faint">Período B (base)</legend>
+          <legend className="mb-1 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-faint">
+            <span className="h-2.5 w-2.5 rounded-[3px] bg-serieb" /> Período B (base)
+          </legend>
           <input type="date" name="b_from" defaultValue={bFrom} className={input} aria-label="Período B, de" />
           <input type="date" name="b_to" defaultValue={bTo} className={input} aria-label="Período B, até" />
         </fieldset>
@@ -192,75 +156,117 @@ export default async function CompararPage({ searchParams }: { searchParams: SP 
           <p className="mt-1 text-crit/80">{error}</p>
         </div>
       ) : (
-        <>
-          <section className="mb-7 overflow-x-auto rounded-xl border border-line bg-panel">
-            <table className="w-full min-w-[520px] text-[13.5px]">
-              <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-faint">
-                  <th className="px-4 py-3 font-medium">Métrica</th>
-                  <th className="px-4 py-3 text-right font-medium text-lime">A · {labelDia(aFrom)} – {labelDia(aTo)}</th>
-                  <th className="px-4 py-3 text-right font-medium">B · {labelDia(bFrom)} – {labelDia(bTo)}</th>
-                  <th className="px-4 py-3 text-right font-medium">A vs B</th>
-                </tr>
-              </thead>
-              <tbody>
-                {METRICAS.map((m) => (
-                  <tr key={m.key} className="border-b border-linesoft last:border-0">
-                    <td className="px-4 py-2.5">
-                      {m.label}
-                      {m.hint && <span className="ml-1.5 text-xs text-faint">{m.hint}</span>}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{fmt(tA[m.key])}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-muted">{fmt(tB[m.key])}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <Delta a={tA[m.key]} b={tB[m.key]} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <StatTile label="Posts" a={A.posts} b={B.posts} />
+            <StatTile label="Posts por dia" a={A.porDia} b={B.porDia} />
+            <StatTile label="Views por post" a={A.viewsMedia} b={B.viewsMedia} />
+            <StatTile label="Com link de casa" a={A.comCasa} b={B.comCasa} />
+            <StatTile label="Com qualquer link" a={A.comLink} b={B.comLink} />
+            <StatTile label="Encaminhamentos" a={A.encaminhamentos} b={B.encaminhamentos} />
+          </div>
 
-          <h2 className="mb-3 text-sm font-semibold text-muted">Dia a dia</h2>
-          <section className="overflow-x-auto rounded-xl border border-line bg-panel">
-            <table className="w-full min-w-[640px] text-[13px]">
-              <thead>
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-faint">
-                  <th className="px-4 py-3 font-medium text-lime">Dia (A)</th>
-                  <th className="px-3 py-3 text-right font-medium">Posts</th>
-                  <th className="px-3 py-3 text-right font-medium">Tips</th>
-                  <th className="px-3 py-3 text-right font-medium">Views/post</th>
-                  <th className="border-l border-line px-4 py-3 font-medium">Dia (B)</th>
-                  <th className="px-3 py-3 text-right font-medium">Posts</th>
-                  <th className="px-3 py-3 text-right font-medium">Tips</th>
-                  <th className="px-3 py-3 text-right font-medium">Views/post</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: linhas }, (_, i) => {
-                  const a = rowsA[i];
-                  const b = rowsB[i];
-                  return (
-                    <tr key={i} className="border-b border-linesoft last:border-0">
-                      <td className="px-4 py-2.5">{a ? labelDia(a.dia) : "—"}</td>
-                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{a ? a.posts : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{a ? a.tips : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{a ? fmt(a.viewsMedia) : "—"}</td>
-                      <td className="border-l border-line px-4 py-2.5 text-muted">{b ? labelDia(b.dia) : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted">{b ? b.posts : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted">{b ? b.tips : "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-muted">{b ? fmt(b.viewsMedia) : "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </section>
-          <p className="mt-3 text-xs text-faint">
-            Tipos dependem da categorização por IA — posts ainda pendentes contam no total, mas não
-            em tips/análises. Veja a fila em Status.
-          </p>
-        </>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card title="Posts por dia" hint="cada par = mesmo dia da sequência">
+              <Legend items={SERIES} />
+              <DayBars
+                a={A.porDiaRows.map((r) => r.posts)}
+                b={B.porDiaRows.map((r) => r.posts)}
+                labels={diasA.map(labelDia)}
+                labelsB={diasB.map(labelDia)}
+                unit="posts"
+              />
+            </Card>
+            <Card title="Views por post, por dia" hint="média do dia · posts recentes ainda acumulam views">
+              <Legend items={SERIES} />
+              <DayBars
+                a={A.porDiaRows.map((r) => r.viewsMedia)}
+                b={B.porDiaRows.map((r) => r.viewsMedia)}
+                labels={diasA.map(labelDia)}
+                labelsB={diasB.map(labelDia)}
+                unit="views/post"
+              />
+            </Card>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
+            <Card title="Casas divulgadas" hint="posts com link pra cada casa">
+              <RankTable rows={casas} headA="A" headB="B" empty="Nenhum link de casa nos dois períodos." />
+            </Card>
+            <Card title="Formato dos posts">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-faint">
+                    <th className="pb-2 font-medium">Formato</th>
+                    <th className="pb-2 text-right font-medium">A</th>
+                    <th className="pb-2 text-right font-medium">B</th>
+                    <th className="pb-2 text-right font-medium">A vs B</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(Object.keys(FORMATO_LABEL) as Formato[])
+                    .filter((f) => A.formatos[f] || B.formatos[f])
+                    .map((f) => (
+                      <tr key={f} className="border-t border-linesoft">
+                        <td className="py-2">{FORMATO_LABEL[f]}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums">{A.formatos[f]}</td>
+                        <td className="py-2 text-right tabular-nums text-muted">{B.formatos[f]}</td>
+                        <td className="py-2 text-right"><Delta a={A.formatos[f]} b={B.formatos[f]} /></td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </Card>
+          </div>
+
+          <Card title="Dia a dia">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-[13px]">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-faint">
+                    <th className="pb-2 font-medium">Dia (A)</th>
+                    <th className="pb-2 text-right font-medium">Posts</th>
+                    <th className="pb-2 text-right font-medium">C/ casa</th>
+                    <th className="pb-2 text-right font-medium">Views/post</th>
+                    <th className="border-l border-line pb-2 pl-4 font-medium">Dia (B)</th>
+                    <th className="pb-2 text-right font-medium">Posts</th>
+                    <th className="pb-2 text-right font-medium">C/ casa</th>
+                    <th className="pb-2 text-right font-medium">Views/post</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: linhas }, (_, i) => {
+                    const a = A.porDiaRows[i];
+                    const b = B.porDiaRows[i];
+                    return (
+                      <tr key={i} className="border-t border-linesoft">
+                        <td className="py-2 capitalize">{a ? labelDia(a.dia) : "—"}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums">{a ? a.posts : "—"}</td>
+                        <td className="py-2 text-right tabular-nums">{a ? a.comCasa : "—"}</td>
+                        <td className="py-2 text-right tabular-nums">{a ? fmt(a.viewsMedia) : "—"}</td>
+                        <td className="border-l border-line py-2 pl-4 capitalize text-muted">{b ? labelDia(b.dia) : "—"}</td>
+                        <td className="py-2 text-right tabular-nums text-muted">{b ? b.posts : "—"}</td>
+                        <td className="py-2 text-right tabular-nums text-muted">{b ? b.comCasa : "—"}</td>
+                        <td className="py-2 text-right tabular-nums text-muted">{b ? fmt(b.viewsMedia) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card title="Posts lado a lado" hint="o que foi postado em cada dia, na ordem do dia">
+            <div className="space-y-6">
+              {Array.from({ length: linhas }, (_, i) => (
+                <div key={i} className="grid gap-4 border-t border-linesoft pt-5 first:border-0 first:pt-0 md:grid-cols-2">
+                  <DayColumn day={diasA[i]} posts={byDayA.get(diasA[i] ?? "") ?? []} serie="a" />
+                  <DayColumn day={diasB[i]} posts={byDayB.get(diasB[i] ?? "") ?? []} serie="b" />
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
       )}
     </main>
   );

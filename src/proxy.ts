@@ -8,6 +8,12 @@ export async function proxy(req: NextRequest) {
   const password = process.env.PANEL_PASSWORD;
   if (!password) return NextResponse.next();
 
+  // So em desenvolvimento local: abre o painel sem login pra conferir telas
+  // (PANEL_AUTH_DISABLED=1). Em producao esta linha nunca libera nada.
+  if (process.env.NODE_ENV !== "production" && process.env.PANEL_AUTH_DISABLED === "1") {
+    return NextResponse.next();
+  }
+
   // A propria pagina de login fica liberada.
   if (req.nextUrl.pathname === "/login") return NextResponse.next();
 

@@ -37,13 +37,6 @@ const FERRAMENTAS: Item[] = [
     label: "Comparar períodos",
     icon: <Icon d="M3 3v18h18M7 14l3-4 3 3 4-6" />,
   },
-  {
-    href: "/perfis",
-    label: "Perfis",
-    icon: (
-      <Icon d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-    ),
-  },
 ];
 
 const GESTAO: Item[] = [

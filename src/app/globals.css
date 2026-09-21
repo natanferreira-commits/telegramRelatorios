@@ -18,6 +18,10 @@
   --color-warn: #e8a33d;     /* status atenção */
   --color-crit: #e5544b;     /* status crítico */
 
+  /* séries dos relatórios (A × B) — validadas pra daltonismo contra --color-panel */
+  --color-seriea: #3fa873;
+  --color-serieb: #8b7fe0;
+
   /* categóricas (distribuição de conteúdo) — calmas, cockpit */
   --color-c1: #46b27c;
   --color-c2: #4c93a8;
