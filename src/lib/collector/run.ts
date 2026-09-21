@@ -167,7 +167,6 @@ async function collectSource(
     reverse: true,
     minId: cursor,
     limit: opts.maxPerSource,
-    waitTime: 1,
   })) {
     buffer.push(m);
     seen++;

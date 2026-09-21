@@ -67,6 +67,22 @@ function buttonUrls(msg: Any): string[] {
   return urls;
 }
 
+// Destino dos links do texto. Quase todo link de afiliado vem "escondido"
+// (texto clicavel): a URL so existe na entidade, nao no texto.
+function textUrls(msg: Any, text: string | null): string[] {
+  const urls: string[] = [];
+  const raw: string = typeof msg.message === "string" ? msg.message : (text ?? "");
+  for (const e of (msg.entities ?? []) as Any[]) {
+    if (e?.className === "MessageEntityTextUrl" && typeof e.url === "string") {
+      urls.push(e.url);
+    } else if (e?.className === "MessageEntityUrl") {
+      const u = raw.substr(Number(e.offset) || 0, Number(e.length) || 0).trim();
+      if (u) urls.push(u);
+    }
+  }
+  return urls;
+}
+
 function hasLinkOf(msg: Any, text: string | null, buttons: string[]): boolean {
   if (buttons.length > 0) return true;
   const entities: Any[] = msg.entities ?? [];
@@ -109,6 +125,7 @@ export function toRow(
 ): PostRow {
   const text = textOf(msg);
   const buttons = buttonUrls(msg);
+  const links = [...new Set([...textUrls(msg, text), ...buttons])];
   return {
     channel_id: channelId,
     channel_title: channelTitle,
@@ -125,6 +142,7 @@ export function toRow(
       grouped_id: msg.groupedId ? String(msg.groupedId) : null,
       media_class: msg.media?.className ?? null,
       buttons,
+      links,
       edited: msg.editDate ? Number(msg.editDate) : null,
       pinned: Boolean(msg.pinned),
     },
