@@ -258,13 +258,19 @@ export async function runCollector(options: RunOptions): Promise<RunResult> {
   // Trava: a mesma sessao do Telegram NAO pode conectar em dois lugares ao
   // mesmo tempo (o Telegram derruba a sessao). Se ja tem execucao recente em
   // aberto, esta sai sem fazer nada.
-  const { data: abertas } = await supabase
+  // Janela da trava: a rota serverless morre em ate 5 min (6 de folga); o CLI
+  // da primeira carga pode rodar ~25 min, entao segura o cron por 30.
+  const { data: recentes } = await supabase
     .from("collector_runs")
-    .select("id")
+    .select("origem,started_at")
     .is("finished_at", null)
-    .gte("started_at", new Date(Date.now() - 6 * 60_000).toISOString())
-    .limit(1);
-  if (abertas && abertas.length > 0) {
+    .gte("started_at", new Date(Date.now() - 30 * 60_000).toISOString());
+  const abertas = ((recentes as { origem: string | null; started_at: string }[] | null) ?? []).filter(
+    (r) =>
+      r.origem === "cli" ||
+      Date.now() - new Date(r.started_at).getTime() < 6 * 60_000,
+  );
+  if (abertas.length > 0) {
     return {
       ok: true,
       skipped: "ja existe uma coleta em andamento",
